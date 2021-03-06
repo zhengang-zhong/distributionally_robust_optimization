@@ -32,12 +32,15 @@ class Opt_problem:
         self.Q = Q
         self.Qf = Qf
         self.R = R
-
-        Jx, Ju, eigval, eigvec, H_cal_dec, H, H_new_matrix, H_new, loss_func = self.define_loss_func(n, m, d, r, Nu, Nw, Bx, Cx_tilde, N, Q, Qf, R, mu, beta, sin_const)
+        Jx, Ju, eigval,eigvec, H_cal_dec, H, H_new_matrix, H_new, loss_func = self.define_loss_func(n, m, d, r, Nu, Nw, Bx, Cx_tilde, N, Q, Qf, R, mu, beta, sin_const)
         # W_sample_matrix, W_sample_matrix_ext = self.disturbance_para(N, d, N_sample, sin_const)
         W_sample_matrix, W_sample_matrix_ext = self.gene_disturbance(N, d, N_sample, sin_const)
+
         lambda_var, gamma_matrix, si_var, constraint = self.define_constraint(W_sample_matrix, W_sample_matrix_ext, eigvec, H_cal_dec, H, H_new, n, d, Bx, Cx_tilde, Cy_tilde,
                           Ey_tilde, N, N_sample, sin_const, i_th_state, i_state_ub, epsilon)
+        self.lambda_var = lambda_var
+        self.si_var = si_var
+
         self.H_cal_dec = H_cal_dec
         self.W_sample_matrix = W_sample_matrix
         self.W_sample_matrix_ext = W_sample_matrix_ext
@@ -57,10 +60,10 @@ class Opt_problem:
         W_sample_matrix_ext = np.vstack([np.ones([1, N_sample]), W_sample_matrix])
         return W_sample_matrix, W_sample_matrix_ext
 
-    def disturbance_para(self, N, d, N_sample, sin_const):
-        W_sample_matrix = cp.Parameter((N * d, N_sample))
-        W_sample_matrix_ext = cp.vstack([np.ones([1, N_sample]),W_sample_matrix])
-        return W_sample_matrix, W_sample_matrix_ext
+    # def disturbance_para(self, N, d, N_sample, sin_const):
+    #     W_sample_matrix = cp.Parameter((N * d, N_sample))
+    #     W_sample_matrix_ext = cp.vstack([np.ones([1, N_sample]),W_sample_matrix])
+    #     return W_sample_matrix, W_sample_matrix_ext
 
     def define_loss_func(self, n, m, d, r, Nu, Nw, Bx, Cx_tilde, N, Q, Qf, R, mu, beta, sin_const):
         # Define decision variables for POB affine constrol law
@@ -103,7 +106,7 @@ class Opt_problem:
         #         H_new_matrix += [cp.Variable([Nu,1])]
         #     H_new = cp.hstack(H_new_matrix)
         for i in range(Nu):
-            H_new_matrix += [cp.Variable([1, Nw + 1])]
+            H_new_matrix += [cp.Variable((1, Nw + 1))]
         H_new = cp.vstack(H_new_matrix)
 
         #     print(H_new.shape)
@@ -122,10 +125,14 @@ class Opt_problem:
             #         print(np.shape(H_new_matrix[i].T))
             loss_func += eigval[i] * M_w[i, i] * cp.quad_form(H_new_matrix[i].T,
                                                               I)  # When M_w is identity matrix. Otherwise reformulate system matrix or this line
+        #     loss_func += cp.trace(2 * Cx_tilde.T @ Jx @ Bx @ eigvec @ H_new  @ M_w)
         loss_func += cp.trace(2 * Cx_tilde.T @ Jx @ Bx @ H @ M_w)
+        #     loss_func += cp.trace(2 * Cx_tilde.T @ Jx @ Bx @ H_cal_dec @ (Cy_tilde + Ey_tilde) @ M_w)
         loss_func += cp.trace(Cx_tilde.T @ Jx @ Cx_tilde @ M_w)
         # Reformulate mu_w.T @ (H.T @ (Ju + Bx.T @ Jx @ Bx)@ H ) @ mu_w
+        #     loss_func += eigval[0] * cp.quad_form(H_new_matrix[0].T, I) +  2 * mu_w.T @  Cx_tilde.T @ Jx @ Bx @ eigvec @ H_new @ mu_w
         loss_func += eigval[0] * cp.quad_form(H_new_matrix[0].T, I) + 2 * mu_w.T @ Cx_tilde.T @ Jx @ Bx @ H @ mu_w
+        #     loss_func += eigval[0] * cp.quad_form(H_new_matrix[0].T, I) +  2 * mu_w.T @  Cx_tilde.T @ Jx @ Bx @ H_cal_dec @ (Cy_tilde + Ey_tilde) @ mu_w
         loss_func += mu_w.T @ Cx_tilde.T @ Jx @ Cx_tilde @ mu_w
 
         return Jx, Ju, eigval, eigvec, H_cal_dec, H, H_new_matrix, H_new, loss_func
@@ -137,44 +144,51 @@ class Opt_problem:
         constraint += [H_new == np.linalg.inv(eigvec) @ H]
         #     constraint += [H_new == eigvec.T @ H ]
         constraint += [H == H_cal_dec @ (Cy_tilde + Ey_tilde)]
+        #     constraint += [H_new == np.linalg.inv(eigvec) @ H_cal_dec @ (Cy_tilde + Ey_tilde) ]
 
         #     i_th_state = 1 # 0 for first element, 1 for second element
         #     i_state_ub = 0.05
 
         d_supp = np.vstack((sin_const * np.ones([N * d, 1]), sin_const * np.ones([N * d, 1])))
         C_supp = np.vstack((np.diag([1] * N * d), np.diag([-1] * N * d)))
-
-        lambda_var = cp.Variable()
+        #     d_supp = np.vstack( ( 0 * np.ones([N*d, 1]), 0 * np.ones([N*d, 1])))
+        #     C_supp = np.vstack( (np.diag([0]*N*d), np.diag([0]*N*d) ))
+        #     lambda_var = cp.Variable()
+        lambda_var = cp.Variable(nonneg=True)
 
         gamma_shape = np.shape(d_supp)[0]
         gamma_matrix = []
         for i in range(N_sample):
             for j in range(N):
-                gamma_var = cp.Variable([gamma_shape, 1])
+                gamma_var = cp.Variable((gamma_shape, 1), nonneg=True)
+                #             gamma_var = cp.Variable([gamma_shape,1])
                 gamma_matrix += [gamma_var]
         # k in N, i in N_sample
         # bk + <ak,xi_i>
         X_constraint = (Bx @ H_cal_dec @ (Cy_tilde + Ey_tilde) + Cx_tilde) @ W_sample_matrix_ext
-        si_var = cp.Variable([N_sample, 1])
+        #     si_var = cp.Variable((N_sample,1))
+        si_var = cp.Variable(N_sample)
 
         for i in range(N_sample):
             for j in range(N):
                 #             print(N_sample)
                 constraint_temp = X_constraint[n * (j + 1) + i_th_state, i] + gamma_matrix[i * N + j].T @ (
                             d_supp - C_supp @ W_sample_matrix[:, [i]])
-                constraint += [constraint_temp <= si_var[i, 0]]
+                #             constraint += [constraint_temp <= si_var[i,0]]
+                constraint += [constraint_temp <= si_var[i]]
 
         ak_matrix = (Bx @ H_cal_dec @ (Cy_tilde + Ey_tilde) + Cx_tilde)[:, 1:]
         for i in range(N_sample):
             for j in range(N):
-                constraint_temp = C_supp.T @ gamma_matrix[i * N + j] - ak_matrix[n * (j + 1) + i_th_state:n * (
-                            j + 1) + i_th_state + 1, :].T
-                constraint_temp = C_supp.T @ gamma_matrix[i * N + j] - ak_matrix[ [n * (j + 1) + i_th_state], :].T
-                constraint += [cp.norm_inf(constraint_temp) <= lambda_var]
+                #             constraint_temp = C_supp.T @ gamma_matrix[i * N + j] - ak_matrix[n * (j+1) + i_th_state:n * (j+1)+i_th_state + 1,:].T
+                constraint_temp = C_supp.T @ gamma_matrix[i * N + j] - ak_matrix[[n * (j + 1) + i_th_state], :].T
+                #             constraint += [cp.norm_inf(constraint_temp) <= lambda_var]
+                constraint += [cp.norm(constraint_temp, p=np.inf) <= lambda_var]
 
-        for i in range(N_sample):
-            for j in range(N):
-                constraint += [gamma_matrix[i * N + j] >= 0]
+        #     for i in range(N_sample):
+        #         for j in range(N):
+        #             constraint += [gamma_matrix[i * N + j] >= 0]
+        #     constraint += [lambda_var * epsilon + 1/N_sample * cp.sum(si_var) <= i_state_ub]
         constraint += [lambda_var * epsilon + 1 / N_sample * cp.sum(si_var) <= i_state_ub]
         return lambda_var, gamma_matrix, si_var, constraint
 
