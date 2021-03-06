@@ -15,7 +15,7 @@ class Simulation:
 
     '''
 
-    def __init__(self, model, Q, Qf, R, mu, x_init, beta = 0.95, N_sample = 5, i_th_state = 1, i_state_ub = 0.05, epsilon = 1,
+    def __init__(self, model, Q, Qf, R, mu, x_init, beta = 0.95, N_sample = 10, i_th_state = 1, i_state_ub = 0.05, epsilon = 1,
                  sin_const = 1, N_sim=80, mode = "collect"):
 
         self.Q = Q
@@ -74,6 +74,9 @@ class Simulation:
         for i in range(N_sim):
             #     if i % N == 0:
             self.model.change_xinit(xk)
+
+
+
             opt_problem = Opt_problem(self.model, Q, Qf, R, mu, beta=beta, N_sample=N_sample, i_th_state=i_th_state,
                                       i_state_ub=i_state_ub, epsilon=epsilon, sin_const=sin_const)
             # W_sample, W_sample_ext = self.gene_disturbance(N, d, N_sample, sin_const)
@@ -83,17 +86,25 @@ class Simulation:
             #     print( prob.solve(verbose=True))
 
             prob.solve(solver=cp.MOSEK)
+            # print("opt value:", prob.value)
+            #     print( prob.solve(verbose=True))
+            #         prob.solve(solver = cp.MOSEK,verbose = True, mosek_params = {mosek.dparam.basis_tol_s:1e-9, mosek.dparam.ana_sol_infeas_tol:0})
             #         print(Ax @ x_init +  Bx @ H.value @ W_sample_matrix_ext[:,0:1]  + Cx @ W_sample_matrix[:,0:1])
-            #     print("status:", prob.status)
-            #         print("Controller", H_cal_dec.value[0,0], H_cal_dec.value[0,1])
-            #         print("lambda",lambda_var.value)
-            #         print("si",si_var.value)
-            #     print("state_constraint", np.sum(si_var.value)/N_sample + lambda_var.value * epsilon)
-
+            #         print("status:", prob.status)
+            # print("Controller", opt_problem.H_cal_dec.value[0,0], opt_problem.H_cal_dec.value[0,1])
+            #         print("dual:", constraint[0].dual_value)
+            #         print("gamma", gamma_matrix[0].value,  gamma_matrix[1].value,  gamma_matrix[2].value,  gamma_matrix[3].value)
+            # print("lambda",opt_problem.lambda_var.value)
+            #         print("lambda time epsilon",lambda_var.value * epsilon)
+            # print("si",opt_problem.si_var.value)
+            # print("si average",np.sum(opt_problem.si_var.value)/N_sample)
+            # print("state_constraint", np.mean(opt_problem.si_var.value) + opt_problem.lambda_var.value * epsilon)
+            # print("state",(self.model.Bx @ opt_problem.H_cal_dec.value @ (self.model.Cy_tilde + self.model.Ey_tilde) + self.model.Cx_tilde) @ opt_problem.W_sample_matrix_ext)
+                    # print("disturbance data", W_sample_matrix)
             wk = sin_const * np.sin(np.random.randn(d, 1))
             uk = opt_problem.H_cal_dec.value[0, 0] + opt_problem.H_cal_dec.value[0, 1] * (D @ xk + E @ wk)
             u_list += uk.flatten().tolist()
-            print(xk,uk)
+            print("current state and input", xk, uk)
             x_kp1 = self.simulation_Euler(Ak, Bk, xk, uk)
             x_list += x_kp1.flatten().tolist()
             xk = x_kp1
