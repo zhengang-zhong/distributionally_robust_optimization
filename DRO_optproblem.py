@@ -4,7 +4,7 @@ import mosek
 
 
 class Opt_problem:
-    def __init__(self, model, Q, Qf, R, mu, beta = 0.95, N_sample = 5, i_th_state = 1, i_state_ub = 0.05, epsilon = 1, sin_const = 1):
+    def __init__(self, model, Q, Qf, R, beta = 0.95, N_sample = 5, i_th_state = 1, i_state_ub = 0.05, epsilon = 1, sin_const = 1, collect = None, est = False, data_set = None, mu = None, sigma = None):
 
         N = model.N
 
@@ -32,12 +32,48 @@ class Opt_problem:
         self.Q = Q
         self.Qf = Qf
         self.R = R
-        Jx, Ju, eigval,eigvec, H_cal_dec, H, H_new_matrix, H_new, loss_func = self.define_loss_func(n, m, d, r, Nu, Nw, Bx, Cx_tilde, N, Q, Qf, R, mu, beta, sin_const)
-        # W_sample_matrix, W_sample_matrix_ext = self.disturbance_para(N, d, N_sample, sin_const)
-        W_sample_matrix, W_sample_matrix_ext = self.gene_disturbance(N, d, N_sample, sin_const)
+        self.sin_const = sin_const
 
-        lambda_var, gamma_matrix, si_var, constraint = self.define_constraint(W_sample_matrix, W_sample_matrix_ext, eigvec, H_cal_dec, H, H_new, n, d, Bx, Cx_tilde, Cy_tilde,
-                          Ey_tilde, N, N_sample, sin_const, i_th_state, i_state_ub, epsilon)
+        if not est:
+            if mu is not None:
+                self.mu = mu
+            else:
+                print("mu not given")
+            if sigma is not None:
+                self.sigma = sigma
+            else:
+                print("sigma not given")
+
+        #     mu_w, M_w = self.mean_covariance(N, d, data_set=None)
+        # if est:
+        #     mu_w, M_w = self.mean_covariance(N, d, data_set=data_set)
+        #
+        # self.mu_w = mu_w
+        # self.M_w = M_w
+
+
+        if not collect:
+            W_sample_matrix, W_sample_matrix_ext = self.gene_disturbance(N, d, N_sample, sin_const)
+            data_set = W_sample_matrix
+            self.mean_covariance(N, d, data_set=data_set, est = est)
+            # print(W_sample_matrix)
+            Jx, Ju, eigval,eigvec, H_cal_dec, H, H_new_matrix, H_new, loss_func = self.define_loss_func(n, m, d, r, Nu, Nw, Bx, Cx_tilde, N, Q, Qf, R, mu, beta, sin_const)
+            # W_sample_matrix, W_sample_matrix_ext = self.disturbance_para(N, d, N_sample, sin_const)
+            lambda_var, gamma_matrix, si_var, constraint = self.define_constraint(W_sample_matrix, W_sample_matrix_ext, eigvec, H_cal_dec, H, H_new, n, d, Bx, Cx_tilde, Cy_tilde,
+                              Ey_tilde, N, N_sample, sin_const, i_th_state, i_state_ub, epsilon)
+        if collect:
+            W_sample_matrix, W_sample_matrix_ext = self.select_disturbance(N, d, N_sample, sin_const,data_set)
+            self.mean_covariance(N, d, data_set=data_set)
+            Jx, Ju, eigval, eigvec, H_cal_dec, H, H_new_matrix, H_new, loss_func = self.define_loss_func(n, m, d, r, Nu,
+                                                                                                         Nw, Bx,
+                                                                                                         Cx_tilde, N, Q,
+                                                                                                         Qf, R, mu,
+                                                                                                         beta,
+                                                                                                         sin_const)
+
+            lambda_var, gamma_matrix, si_var, constraint = self.define_constraint(W_sample_matrix, W_sample_matrix_ext, eigvec, H_cal_dec, H, H_new, n, d, Bx, Cx_tilde, Cy_tilde,
+                              Ey_tilde, N, N_sample, sin_const, i_th_state, i_state_ub, epsilon)
+
         self.lambda_var = lambda_var
         self.si_var = si_var
 
@@ -48,6 +84,12 @@ class Opt_problem:
         self.obj = cp.Minimize(loss_func)
         self.prob = cp.Problem(self.obj, constraint)
 
+    def select_disturbance(self, N, d, N_sample, sin_const,data_set):
+        W_sample_matrix = np.vstack(data_set[- N * N_sample:])
+        W_sample_matrix = W_sample_matrix.T.reshape(d * N, -1, order='F')
+        W_sample_matrix_ext = np.vstack([np.ones([1, N_sample]), W_sample_matrix])
+
+        return W_sample_matrix, W_sample_matrix_ext
     def gene_disturbance(self, N, d, N_sample, sin_const):
         # Generate data: const * sinx
 
@@ -64,6 +106,38 @@ class Opt_problem:
     #     W_sample_matrix = cp.Parameter((N * d, N_sample))
     #     W_sample_matrix_ext = cp.vstack([np.ones([1, N_sample]),W_sample_matrix])
     #     return W_sample_matrix, W_sample_matrix_ext
+
+
+    def mean_covariance(self, N, d, data_set = None, est = False):
+        if est is False:
+            mu = self.mu
+            sigma = self.sigma
+            sin_const = self.sin_const
+            mu_w = np.vstack([1] + [mu] * N)
+            #     M_w = mu_w @ mu_w.T + np.diag([0] + [1] * N * d)
+            M_w = np.diag([1] + [sin_const ** 2 * (1 - np.exp(-2 * sigma ** 2)) / 2] * N * d)
+        elif est is True:
+            if data_set is None:
+                print("mean_covariance function error")
+            else:
+                # Estimate mean and covariance from data
+                # print("data",data_set)
+                if isinstance(data_set, list):
+                    W_sample_matrix = np.vstack(data_set)
+                else:
+                    W_sample_matrix = data_set
+                W_sample_matrix = W_sample_matrix.T.reshape(d, -1, order='F')
+                # print(W_sample_matrix)
+                est_mean = np.mean(W_sample_matrix, axis=1).reshape(-1,1)
+                est_var = np.var(W_sample_matrix, axis=1, ddof=1).flatten().tolist()
+
+                mu_w = np.vstack([1] + [est_mean] * N)
+                M_w = np.diag([1] + est_var * N)
+        # print(mu_w, M_w)
+        self.mu_w = mu_w
+        self.M_w = M_w
+        # return mu_w, M_w
+
 
     def define_loss_func(self, n, m, d, r, Nu, Nw, Bx, Cx_tilde, N, Q, Qf, R, mu, beta, sin_const):
         # Define decision variables for POB affine constrol law
@@ -95,10 +169,14 @@ class Opt_problem:
         for i in range(N):
             Ju[i * m: (i + 1) * m, i * m: (i + 1) * m] = beta ** i * R
 
+
+
         # This is only for var = 1 and mean = 0. Should be modified.
-        mu_w = np.vstack([1] + [mu] * N)
+        mu_w = self.mu_w
+        M_w = self.M_w
+        # mu_w = np.vstack([1] + [mu] * N)
         #     M_w = mu_w @ mu_w.T + np.diag([0] + [1] * N * d)
-        M_w = np.diag([1] + [sin_const ** 2 * (1 - np.exp(-2 * sigma ** 2)) / 2] * N * d)
+        # M_w = np.diag([1] + [sin_const ** 2 * (1 - np.exp(-2 * sigma ** 2)) / 2] * N * d)
 
         # Intermediate decision variables. Since CVXPY does not support quadratic obj of decision variable matrix.
         H_new_matrix = []
@@ -176,7 +254,7 @@ class Opt_problem:
                             d_supp - C_supp @ W_sample_matrix[:, [i]])
                 #             constraint += [constraint_temp <= si_var[i,0]]
                 constraint += [constraint_temp <= si_var[i]]
-
+        # print("constraint_temp", constraint_temp.shape)
         ak_matrix = (Bx @ H_cal_dec @ (Cy_tilde + Ey_tilde) + Cx_tilde)[:, 1:]
         for i in range(N_sample):
             for j in range(N):
