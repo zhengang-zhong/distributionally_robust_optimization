@@ -45,28 +45,34 @@ if __name__ == "__main__":
 
     delta_t = 0.1
 
-    x_init = np.array([[0], [0], [-np.pi], [0]])
-    C = np.diag([1e-2, 0, 0, 0])
-    D = np.array([[1, 0, 0, 0]])
+    # x_init = np.array([[0], [0], [-np.pi/2], [0]])
+    x_init = np.array([[0], [0], [-0.5], [0]])
+    # C = np.diag([0, 0, 0, 1e-2])
+    # C = np.array([[0, 0],[0, 0],[1e-2, 0],[0, 0]])
+    C = np.array([[0, 0],[0, 0],[0, 0],[1e-2, 0]])
+    D = np.array([[0, 0, 1, 0]])
     # D = np.array([[1, 0, 0, 0], [0,0,1,0]])
-    E = np.array([[1e-2, 0, 0, 0]])
+    E = np.array([[0, 1e-2]])
+    # E = np.array([[0, 0, 1e-2, 0]])
     N = 5
     model = Model(A, B, C, D, E, x_init, N, delta_t)
 
-    Q = np.diag([1000, 0, 200, 0])
-    Qf = np.diag([1000, 0, 200, 0])
+    Q = np.diag([1000, 1, 1500, 1])
+    Qf = np.diag([1000, 1, 1500, 1])
     R = np.diag([1])
 
     d = model.d
     mu = np.zeros([d, 1])
+    sigma = 1
     beta = 0.95
-    N_sample = 10
-    i_th_state = 1
-    i_state_ub = 6.2
-    epsilon = 1
-    sin_const = 2
-    N_sim = 30
+    N_sample = 3
+    i_th_state = 3
+    i_state_ub = 0.5
+    epsilon = 10
 
-    sim = Simulation(model, Q, Qf, R, mu, x_init, beta = beta, N_sample = N_sample, i_th_state = i_th_state, i_state_ub = i_state_ub, epsilon = epsilon,
-    sin_const = sin_const, N_sim=N_sim, mode = "gene")
+    sin_const = 3
+    N_sim = 60
+    sim = Simulation(model, Q, Qf, R, x_init, beta = beta, N_sample = N_sample, i_th_state = i_th_state, i_state_ub = i_state_ub, epsilon = epsilon,
+    sin_const = sin_const, N_sim=N_sim, mode = "gene", mu = mu, sigma = sigma, est = False)
     print(sim.x_sim)
+    sim.plot_state()
