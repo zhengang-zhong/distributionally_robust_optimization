@@ -18,17 +18,14 @@ def mass_string_ode(t, x, u):
 
     return dot_x
 
-# def gene_disturbance(N, d, N_sample, sin_const):
-#     # Generate data: const * sinx
-#
-#     w_sample = []
-#     for i in range(N_sample):
-#         w_temp = sin_const * np.sin(np.random.randn(N*d))
-#         w_sample += [w_temp]
-#     W_sample_matrix = np.array(w_sample).T
-#
-#     W_sample_matrix_ext = np.vstack( [np.ones([1, N_sample]),W_sample_matrix])
-#     return W_sample_matrix, W_sample_matrix_ext
+def gene_sample(N, d, N_sample, sin_const):
+    # Generate data: const * sinx
+
+    w_sample = []
+    for i in range(N_sample * N):
+        w_temp = sin_const * np.sin(np.random.randn(d, 1))
+        w_sample += [w_temp]
+    return w_sample
 
 if __name__ == "__main__":
 
@@ -57,20 +54,42 @@ if __name__ == "__main__":
 
     d = model.d
     mu = np.zeros([d, 1])
-    mu_w = np.vstack([1] + [mu] * N)
-    M_w = mu_w @ mu_w.T + np.diag([0] + [1] * N * d)
+    sigma = 1
     beta = 0.95
-    N_sample = 3
+    N_sample = 1
     i_th_state = 1
     i_state_ub = 0.5
     epsilon = 1
     sin_const = 2
     N_sim = 60
 
-    sim = Simulation(model, Q, Qf, R, mu, x_init, beta = beta, N_sample = N_sample, i_th_state = i_th_state, i_state_ub = i_state_ub, epsilon = epsilon,
-    sin_const = sin_const, N_sim=N_sim, mode = "gene")
+    # Generate date, mu and sigma are given
+    # sim = Simulation(model, Q, Qf, R, x_init, beta = beta, N_sample = N_sample, i_th_state = i_th_state, i_state_ub = i_state_ub, epsilon = epsilon,
+    # sin_const = sin_const, N_sim=N_sim, mode = "gene", mu = mu, sigma = sigma, est = False)
+    # print(sim.x_sim)
+
+    # Generate date, mu and sigma are estimated from data
+    sim = Simulation(model, Q, Qf, R, x_init, beta = beta, N_sample = N_sample, i_th_state = i_th_state, i_state_ub = i_state_ub, epsilon = epsilon,
+    sin_const = sin_const, N_sim=N_sim, mode = "gene", mu = mu, sigma = sigma, est = True)
     print(sim.x_sim)
 
+    # Collect date, mu and sigma are given
+    # data_set = gene_sample(N, d, N_sample, sin_const)
+    # print(data_set)
+    # N_sample_max = 10
+    # sim = Simulation(model, Q, Qf, R, x_init, beta = beta, N_sample = N_sample, i_th_state = i_th_state, i_state_ub = i_state_ub, epsilon = epsilon,
+    # sin_const = sin_const, N_sim=N_sim, mode = "collect", data_set = data_set, N_sample_max = N_sample_max, mu = mu, sigma = sigma, est = False)
+    # print(sim.x_sim)
+
+    # Collect date, mu and sigma are estimated from data
+    # data_set = gene_sample(N, d, N_sample, sin_const)
+    # print(data_set)
+    # N_sample_max = 10
+    # sim = Simulation(model, Q, Qf, R, x_init, beta = beta, N_sample = N_sample, i_th_state = i_th_state, i_state_ub = i_state_ub, epsilon = epsilon,
+    # sin_const = sin_const, N_sim=N_sim, mode = "collect", data_set = data_set, N_sample_max = N_sample_max, mu = mu, sigma = sigma, est = True)
+    # print(sim.x_sim)
+
+    sim.plot_state()
 
     # opt_problem = Opt_problem(model, Q, Qf, R, mu, beta = beta, N_sample = N_sample, i_th_state = i_th_state, i_state_ub = i_state_ub, epsilon = epsilon, sin_const = sin_const)
     # W_sample, W_sample_ext =gene_disturbance(N, d, N_sample, sin_const)
