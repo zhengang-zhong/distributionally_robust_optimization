@@ -36,11 +36,10 @@ if __name__ == "__main__":
     u_SX = ca.SX.sym("u_SX", 1)
 
     ode = ca.Function("ode_func", [x_SX, u_SX], [inverted_pendulum_nonlinear_ode(x_SX, u_SX)])
-    delta_t = 0.5
-    N = 5
+    delta_t = 0.05
 
     # x_init = np.array([[0], [0], [-np.pi/2], [0]])
-    x_init = np.array([[-0.5], [0], [0], [0]])
+    x_init = np.array([[-0.2], [0], [0], [0]])
     u_init =  np.array([[0]])
     # C = np.diag([0, 0, 0, 1e-2])
     # C = np.array([[0, 0],[0, 0],[1e-2, 0],[0, 0]])
@@ -49,11 +48,11 @@ if __name__ == "__main__":
     # D = np.array([[1, 0, 0, 0], [0,0,1,0]])
     E = np.array([[0, 1e-2]])
     # E = np.array([[0, 0, 1e-2, 0]])
-    N = 5
+    N = 10
     model = Model_nonlinear(ode, C, D, E, x_init,u_init, N, delta_t)
 
-    Q = np.diag([1500, 1, 1000, 1])
-    Qf = np.diag([1500, 1, 1000, 1])
+    Q = np.diag([1000, 1, 1500, 1])
+    Qf = np.diag([1000, 1, 1500, 1])
     R = np.diag([1])
 
     d = model.d
@@ -65,8 +64,8 @@ if __name__ == "__main__":
     i_state_ub = 0.2
     epsilon = 10
 
-    sin_const = 3
-    N_sim = 50
+    sin_const = 1.5
+    N_sim = 200
     sim = Simulation_nonlinear(model, Q, Qf, R, x_init, beta=beta, N_sample=N_sample, i_th_state=i_th_state,
                                i_state_ub=i_state_ub, epsilon=epsilon,
                                sin_const=sin_const, N_sim=N_sim, mode="gene", mu=mu, sigma=sigma, est=False)
